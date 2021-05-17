@@ -16,6 +16,9 @@ public class Simulator {
 
 	// Modello del mondo
 	private List<Patient> patients;
+	private PriorityQueue<Patient> waitingRoom;
+	// contiene SOLO i pazienti in attesa (WHITE/YELLOW/RED)
+
 	private int freeStudios; // numero studi liberi
 
 	private Patient.ColorCode ultimoColore;
@@ -50,6 +53,7 @@ public class Simulator {
 
 		// inizializza modello del mondo
 		this.patients = new ArrayList<>();
+		this.waitingRoom = new PriorityQueue<>() ;
 		this.freeStudios = this.totStudios;
 
 		this.ultimoColore = ColorCode.RED;
@@ -65,8 +69,10 @@ public class Simulator {
 		int inseriti = 0;
 //		Patient.ColorCode colore = ColorCode.WHITE ;
 
+		this.queue.add(new Event(ora, EventType.TICK, null)) ;
+
 		while (ora.isBefore(this.endTime) && inseriti < this.numPatients) {
-			Patient p = new Patient(ora, ColorCode.NEW);
+			Patient p = new Patient(inseriti, ora, ColorCode.NEW);
 
 			Event e = new Event(ora, EventType.ARRIVAL, p);
 
@@ -75,11 +81,7 @@ public class Simulator {
 
 			inseriti++;
 			ora = ora.plus(T_ARRIVAL);
-
-			/*
-				*/
 		}
-
 	}
 
 	private Patient.ColorCode prossimoColore() {
@@ -105,7 +107,6 @@ public class Simulator {
 
 		Patient p = e.getPatient();
 		LocalTime ora = e.getTime();
-		Patient.ColorCode colore = p.getColor();
 
 		switch (e.getType()) {
 		case ARRIVAL:
@@ -114,43 +115,77 @@ public class Simulator {
 
 		case TRIAGE:
 			p.setColor(prossimoColore());
-			if (p.getColor().equals(Patient.ColorCode.WHITE))
+			if (p.getColor().equals(Patient.ColorCode.WHITE)) {
 				this.queue.add(new Event(ora.plus(TIMEOUT_WHITE), EventType.TIMEOUT, p));
-			else if (p.getColor().equals(Patient.ColorCode.YELLOW))
+				this.waitingRoom.add(p);
+			} else if (p.getColor().equals(Patient.ColorCode.YELLOW)) {
 				this.queue.add(new Event(ora.plus(TIMEOUT_YELLOW), EventType.TIMEOUT, p));
-			else if (p.getColor().equals(Patient.ColorCode.RED))
+				this.waitingRoom.add(p);
+			} else if (p.getColor().equals(Patient.ColorCode.RED)) {
 				this.queue.add(new Event(ora.plus(TIMEOUT_RED), EventType.TIMEOUT, p));
+				this.waitingRoom.add(p);
+			}
 			break;
 
 		case FREE_STUDIO:
+			if(this.freeStudios==0)
+				return ;
+			// Quale paziente ha diritto di entrare???
+			Patient primo = this.waitingRoom.poll() ;
+			if(primo!=null) {
+				// ammetti il paziente nello studio
+				if(primo.getColor().equals(ColorCode.WHITE))
+					this.queue.add(new Event(ora.plus(DURATION_WHITE), EventType.TREATED, primo)) ;
+				if(primo.getColor().equals(ColorCode.YELLOW))
+					this.queue.add(new Event(ora.plus(DURATION_YELLOW), EventType.TREATED, primo)) ;
+				if(primo.getColor().equals(ColorCode.RED))
+					this.queue.add(new Event(ora.plus(DURATION_RED), EventType.TREATED, primo)) ;
+				primo.setColor(ColorCode.TREATING);
+				this.freeStudios-- ;
+			}
 			break;
 
 		case TIMEOUT:
+			Patient.ColorCode colore = p.getColor();
 			switch (colore) {
 			case WHITE:
+				this.waitingRoom.remove(p) ;
 				p.setColor(ColorCode.OUT);
-				this.patientsAbandoned++ ;
+				this.patientsAbandoned++;
 				break;
-				
+
 			case YELLOW:
+				this.waitingRoom.remove(p) ;
 				p.setColor(ColorCode.RED);
 				this.queue.add(new Event(ora.plus(TIMEOUT_RED), EventType.TIMEOUT, p));
+				this.waitingRoom.add(p) ;
 				break;
-				
+
 			case RED:
+				this.waitingRoom.remove(p) ;
 				p.setColor(ColorCode.BLACK);
-				this.patientsDead++ ;
+				this.patientsDead++;
 				break;
-				
+
 			default:
-				System.out.println("ERRORE: TIMEOUT CON COLORE "+colore) ;
+//				System.out.println("ERRORE: TIMEOUT CON COLORE " + colore);
 			}
 			break;
 
 		case TREATED:
+			this.patientsTreated++;
+			p.setColor(ColorCode.OUT);
+			this.freeStudios++ ;
+			this.queue.add(new Event(ora, EventType.FREE_STUDIO, null)) ;
+			break;
+			
+		case TICK:
+			if(this.freeStudios>0 && !this.waitingRoom.isEmpty())
+				this.queue.add(new Event(ora, EventType.FREE_STUDIO, null)) ;
+			if(ora.isBefore(this.endTime))
+				this.queue.add(new Event(ora.plus(Duration.ofMinutes(5)), EventType.TICK, null));
 			break;
 		}
-
 	}
 
 	public void setTotStudios(int totStudios) {

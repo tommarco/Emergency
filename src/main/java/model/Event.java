@@ -15,6 +15,7 @@ public class Event implements Comparable<Event>{
 		TIMEOUT, // passa un certo tempo di attesa
 		FREE_STUDIO, // si è liberato uno studio, chiamiamo qualcuno
 		TREATED, // paziente CURATO
+		TICK, // timer per controllare se ci sono studi liberi
 	} ;
 
 	private LocalTime time ;
