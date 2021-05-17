@@ -20,7 +20,6 @@ The severity code gives priority in accessing the doctors. Patients with the sam
  
 ### Timing
 
-------|---------------|--------
 Phase | Required Time | Example 
 ------|---------------|--------
 Triage | DURATION_TRIAGE | 5 minutes
